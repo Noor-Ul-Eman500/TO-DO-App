@@ -1,0 +1,248 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+// ✅ Main App with Theme Support
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      home: const TodoScreen(),
+    );
+  }
+}
+
+// ✅ To-Do Screen
+class TodoScreen extends StatefulWidget {
+  const TodoScreen({Key? key}) : super(key: key);
+
+  @override
+  _TodoScreenState createState() => _TodoScreenState();
+}
+
+class _TodoScreenState extends State<TodoScreen> {
+  final List<String> tasks = [];
+  final List<bool> completed = [];
+  final TextEditingController controller = TextEditingController();
+  final GlobalKey<AnimatedListState> listKey = GlobalKey<AnimatedListState>();
+  bool isDarkMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    loadTasks();
+  }
+
+  void addTask() {
+    if (controller.text.isEmpty) return;
+
+    setState(() {
+      tasks.add(controller.text);
+      completed.add(false);
+      listKey.currentState?.insertItem(
+        tasks.length - 1,
+        duration: const Duration(milliseconds: 500),
+      );
+      controller.clear();
+    });
+    saveTasks();
+  }
+
+  void toggleTask(int index) {
+    setState(() {
+      completed[index] = !completed[index];
+    });
+    saveTasks();
+  }
+
+  void deleteTask(int index) {
+    String removedTask = tasks[index];
+    bool removedCompleted = completed[index];
+
+    listKey.currentState?.removeItem(
+      index,
+      (context, animation) => SizeTransition(
+        sizeFactor: animation,
+        child: buildTaskCard(removedTask, removedCompleted, index),
+      ),
+      duration: const Duration(milliseconds: 400),
+    );
+
+    setState(() {
+      tasks.removeAt(index);
+      completed.removeAt(index);
+    });
+
+    saveTasks();
+  }
+
+  void saveTasks() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.setStringList('tasks', tasks);
+    prefs.setStringList(
+      'completed',
+      completed.map((e) => e.toString()).toList(),
+    );
+  }
+
+  void loadTasks() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      tasks.clear();
+      tasks.addAll(prefs.getStringList('tasks') ?? []);
+      List<String> comp = prefs.getStringList('completed') ?? [];
+      completed.clear();
+      completed.addAll(comp.map((e) => e == 'true'));
+      while (completed.length < tasks.length) completed.add(false);
+    });
+  }
+
+  Widget buildTaskCard(String task, bool done, int index) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+      child: ListTile(
+        leading: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: done ? Colors.green : Colors.transparent,
+            border: Border.all(
+              color: done ? Colors.green : Colors.grey.shade400,
+              width: 2,
+            ),
+          ),
+          child: Checkbox(
+            value: done,
+            onChanged: (_) => toggleTask(index),
+            activeColor: Colors.white,
+            checkColor: Colors.white,
+          ),
+        ),
+        title: Text(
+          task,
+          style: TextStyle(
+            fontSize: 16,
+            decoration: done ? TextDecoration.lineThrough : null,
+            color: done ? Colors.grey : Colors.black87,
+          ),
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.delete, color: Colors.redAccent),
+          onPressed: () => deleteTask(index),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // ✅ Gradient Background
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDarkMode
+                ? [Colors.grey.shade900, Colors.grey.shade800]
+                : [Colors.blue.shade700, Colors.purple, Colors.pink],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        padding: const EdgeInsets.only(top: 60, left: 16, right: 16),
+        child: Column(
+          children: [
+            // AppBar Row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "My To-Do List",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      isDarkMode = !isDarkMode;
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Input Row
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(230),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        hintText: "Enter a new task...",
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: addTask,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pinkAccent,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 15,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text("Add Task"),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Animated Task List
+            Expanded(
+              child: AnimatedList(
+                key: listKey,
+                initialItemCount: tasks.length,
+                itemBuilder: (context, index, animation) {
+                  return SizeTransition(
+                    sizeFactor: animation,
+                    child: buildTaskCard(tasks[index], completed[index], index),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
